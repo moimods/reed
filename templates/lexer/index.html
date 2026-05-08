@@ -1,0 +1,95 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>Analizador Sintactico</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Analizador Lexico</h1>
+        </header>
+
+        <main class="main-content">
+            <section class="input-section">
+                <div class="section-header">
+                    <h2>Analizador sintactico</h2>
+                    <span class="help-text">Escribe o pega codigo para analizar</span>
+                </div>
+
+                <textarea
+                    id="codeInput"
+                    class="code-textarea"
+                    placeholder="Escribe codigo aqui...&#10;Ejemplo:&#10;x = 10&#10;if x > 5:&#10;    print(&quot;Mayor que 5&quot;)"
+                    spellcheck="false"
+                ></textarea>
+
+                <div class="button-group">
+                    <button id="analyzeBtn" type="button" class="btn btn-primary">
+                        Analizar
+                    </button>
+                    <button id="clearBtn" type="button" class="btn btn-secondary">
+                        Limpiar
+                    </button>
+                </div>
+            </section>
+
+            <section id="errorSection" class="error-section hidden">
+                <div class="section-header">
+                    <h3>Errores sintacticos</h3>
+                </div>
+                <div id="errorList" class="error-list"></div>
+            </section>
+
+            <section id="resultsSection" class="results-section hidden">
+                <div class="section-header">
+                    <h2>Tokens Identificados</h2>
+                    <span class="token-count" id="tokenCount"></span>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-button active" data-tab="tabla">Tabla</button>
+                    <button class="tab-button" data-tab="preview">Preview</button>
+                    <button class="tab-button" data-tab="arbol">Arbol</button>
+                </div>
+
+                <div id="tabla" class="tab-content active">
+                    <div class="table-container">
+                        <table id="tokensTable" class="tokens-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Token</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="preview" class="tab-content">
+                    <div class="preview-container">
+                        <div id="syntaxPreview" class="syntax-preview"></div>
+                    </div>
+                </div>
+
+                <div id="arbol" class="tab-content">
+                    <div class="tree-module">
+                        <iframe id="treeFrame" title="Árbol sintáctico"></iframe>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p></p>
+        </footer>
+    </div>
+
+    <script src="{% static 'js/script.js' %}"></script>
+</body>
+</html>
