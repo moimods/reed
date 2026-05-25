@@ -12,7 +12,7 @@ LANG_CONFIG = {
             "import", "from", "as", "try", "except", "finally", "with",
             "pass", "break", "continue", "and", "or", "not", "in", "is",
             "lambda", "yield", "async", "await", "global", "nonlocal",
-            "assert", "del", "raise",
+            "assert", "del", "raise", "then",
             # Tipos de datos comunes (para parser académico)
             "int", "float", "double", "string", "boolean", "char", "void",
             "var", "let", "const"
@@ -36,7 +36,7 @@ LANG_CONFIG = {
             "import", "instanceof", "int", "interface", "long", "native", "new", "package",
             "private", "protected", "public", "return", "short", "static", "strictfp",
             "super", "switch", "synchronized", "this", "throw", "throws", "transient",
-            "try", "void", "volatile", "while"
+            "try", "void", "volatile", "while", "then"
         },
         "booleans": {"true", "false"},
         "nulls": {"null"},
@@ -56,7 +56,7 @@ LANG_CONFIG = {
             "delete", "do", "else", "export", "extends", "finally", "for", "function",
             "if", "import", "in", "instanceof", "let", "new", "return", "super", "switch",
             "this", "throw", "try", "typeof", "var", "void", "while", "with", "yield",
-            "await", "async"
+            "await", "async", "then"
         },
         "booleans": {"true", "false"},
         "nulls": {"null", "undefined"},
@@ -70,7 +70,72 @@ LANG_CONFIG = {
         },
         "special_chars": {"(", ")", "{", "}", "[", "]", ";", ",", "\"", "'", "`", "$"}
     },
+    "c": {
+        "keywords": {
+            "auto", "break", "case", "char", "const", "continue", "default", "do",
+            "double", "else", "enum", "extern", "float", "for", "goto", "if",
+            "int", "long", "register", "return", "short", "signed", "sizeof", "static",
+            "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while",
+            "then"
+        },
+        "booleans": set(),
+        "nulls": {"NULL"},
+        "line_comment": "//",
+        "block_comment": ("/*", "*/"),
+        "operators": {
+            "+", "-", "*", "/", "%", "=", "==", "!=", "<", ">", "<=", ">=",
+            "+=", "-=", "*=", "/=", "%=", "++", "--", "&&", "||", "!", "~",
+            "&", "|", "^", "<<", ">>", "&=", "|=", "^=", "<<=", ">>=", "->", "?", ":"
+        },
+        "special_chars": {"(", ")", "{", "}", "[", "]", ";", ",", ".", "\"", "'", "$"}
+    },
+    "cpp": {
+        "keywords": {
+            "alignas", "alignof", "asm", "auto", "bool", "break", "case", "catch", "char",
+            "class", "const", "constexpr", "continue", "decltype", "default", "delete", "do",
+            "double", "else", "enum", "explicit", "export", "extern", "false", "float", "for",
+            "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace", "new",
+            "noexcept", "nullptr", "operator", "private", "protected", "public", "register", "return",
+            "short", "signed", "sizeof", "static", "struct", "switch", "template", "this", "throw",
+            "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual",
+            "void", "volatile", "while", "then"
+        },
+        "booleans": {"true", "false"},
+        "nulls": {"nullptr", "NULL"},
+        "line_comment": "//",
+        "block_comment": ("/*", "*/"),
+        "operators": {
+            "+", "-", "*", "/", "%", "=", "==", "!=", "<", ">", "<=", ">=",
+            "+=", "-=", "*=", "/=", "%=", "++", "--", "&&", "||", "!", "~",
+            "&", "|", "^", "<<", ">>", "&=", "|=", "^=", "<<=", ">>=", "->", "::", "?", ":",
+            "<=>"
+        },
+        "special_chars": {"(", ")", "{", "}", "[", "]", ";", ",", ".", "\"", "'", "$"}
+    },
 }
+
+
+LANGUAGE_ALIASES = {
+    "python": "python",
+    "phyton": "python",
+    "py": "python",
+    "java": "java",
+    "javascript": "javascript",
+    "js": "javascript",
+    "c": "c",
+    "cpp": "cpp",
+    "c++": "cpp",
+}
+
+
+def normalize_language(lenguaje: Optional[str]) -> str:
+    if not lenguaje:
+        return "python"
+
+    normalized = LANGUAGE_ALIASES.get(lenguaje.strip().lower())
+    if not normalized:
+        raise ValueError(f"Lenguaje no soportado: {lenguaje}")
+    return normalized
 
 
 class TokenType(Enum):
@@ -109,11 +174,12 @@ class LexicalAnalyzer:
     """Analizador léxico configurable por lenguaje."""
 
     def __init__(self, lenguaje: str = "python", incluir_espacios: bool = False):
-        if lenguaje not in LANG_CONFIG:
+        lenguaje_normalizado = normalize_language(lenguaje)
+        if lenguaje_normalizado not in LANG_CONFIG:
             raise ValueError(f"Lenguaje no soportado: {lenguaje}")
-        self.lenguaje = lenguaje
+        self.lenguaje = lenguaje_normalizado
         self.incluir_espacios = incluir_espacios
-        self.config = LANG_CONFIG[lenguaje]
+        self.config = LANG_CONFIG[lenguaje_normalizado]
 
         # Operadores ordenados por longitud descendente para priorizar multi-caracter.
         self._ops_sorted = sorted(self.config["operators"], key=len, reverse=True)
@@ -246,10 +312,11 @@ class LexicalAnalyzer:
         config = self.config
         ops_sorted = self._ops_sorted
         
-        if lenguaje and lenguaje != self.lenguaje:
-            if lenguaje not in LANG_CONFIG:
+        if lenguaje and normalize_language(lenguaje) != self.lenguaje:
+            lenguaje_normalizado = normalize_language(lenguaje)
+            if lenguaje_normalizado not in LANG_CONFIG:
                 raise ValueError(f"Lenguaje no soportado: {lenguaje}")
-            config = LANG_CONFIG[lenguaje]
+            config = LANG_CONFIG[lenguaje_normalizado]
             ops_sorted = sorted(config["operators"], key=len, reverse=True)
 
         tokens: List[Token] = []
@@ -407,7 +474,7 @@ class LexicalAnalyzer:
 
 
 def analyze_code(codigo: str, lenguaje: str = "python", incluir_espacios: bool = True) -> Dict:
-    analyzer = LexicalAnalyzer(lenguaje=lenguaje, incluir_espacios=incluir_espacios)
+    analyzer = LexicalAnalyzer(lenguaje=normalize_language(lenguaje), incluir_espacios=incluir_espacios)
     tokens, errores = analyzer.tokenize(codigo)
 
     return {

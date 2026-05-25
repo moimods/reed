@@ -35,6 +35,46 @@ const TOKEN_COLORS = {
     'ESPACIO': '#cbd5e1'
 };
 
+const TOKEN_DISPLAY = {
+    PALABRA_RESERVADA: 'palabra reservada',
+    IDENTIFICADOR: 'variable',
+    ENTERO: 'integer',
+    FLOAT: 'float',
+    STRING: 'string',
+    OPERADOR: 'operador',
+    CARACTER_ESPECIAL: 'caracter especial',
+    COMENTARIO: 'comentario',
+    SALTO_LINEA: 'salto de linea',
+    ESPACIO: 'espacio vacio',
+    BOOLEANO: 'booleano',
+    NULL: 'null',
+    ERROR: 'error'
+};
+
+function getDisplayType(tipo) {
+    return TOKEN_DISPLAY[tipo] || tipo.toLowerCase();
+}
+
+function getVisualType(tipo) {
+    if (tipo === 'IDENTIFICADOR') return 'VARIABLE';
+    return tipo;
+}
+
+function getTokenDisplayValue(token) {
+    if (token.tipo === 'SALTO_LINEA') {
+        return '/n';
+    }
+
+    if (token.tipo === 'ESPACIO') {
+        if (/^\t+$/.test(token.valor)) {
+            return '/t';
+        }
+        return token.valor;
+    }
+
+    return token.valor;
+}
+
 // ============================================
 // EVENT LISTENERS
 // ============================================
@@ -78,7 +118,10 @@ async function analyzeCode() {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCSRFToken()
             },
-            body: JSON.stringify({ codigo: codigo })
+            body: JSON.stringify({
+                codigo: codigo,
+                lenguaje: 'python'
+            })
         });
 
         if (!response.ok) {
@@ -99,7 +142,7 @@ async function analyzeCode() {
         console.error('Error al analizar:', error);
     } finally {
         analyzeBtn.disabled = false;
-        analyzeBtn.textContent = 'Analizar Código';
+        analyzeBtn.textContent = 'Analizar';
     }
 }
 
@@ -148,7 +191,7 @@ function displayResults(data) {
     renderSyntaxPreview(tokens);
 
     // Cargar el módulo del árbol con el mismo código del analizador
-    treeFrame.src = `/arbol/?codigo=${encodeURIComponent(codeInput.value)}`;
+    treeFrame.src = `/arbol/?codigo=${encodeURIComponent(codeInput.value)}&lenguaje=python`;
 
     // Scroll a resultados
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -172,19 +215,10 @@ function renderTokensTable(tokens) {
         // Columna: Token formateado como <'valor', tipo>
         const tdToken = document.createElement('td');
         const spanToken = document.createElement('span');
-        spanToken.className = `token-tipo ${token.tipo}`;
-        
-        // Mostrar saltos de línea como \n
-        let displayValue;
-        if (token.tipo === 'SALTO_LINEA') {
-            displayValue = '\\n';
-        } else if (token.tipo === 'ESPACIO') {
-            displayValue = '(espacio)';
-        } else {
-            displayValue = token.valor;
-        }
-        
-        spanToken.textContent = `<'${displayValue}', ${token.tipo}>`;
+        spanToken.className = `token-tipo ${getVisualType(token.tipo)}`;
+        const displayValue = getTokenDisplayValue(token);
+        const displayType = getDisplayType(token.tipo);
+        spanToken.textContent = `<'${displayValue}', ${displayType}>`;
         tdToken.appendChild(spanToken);
         row.appendChild(tdToken);
 
@@ -216,7 +250,7 @@ function renderSyntaxPreview(tokens) {
 
         // Crear span para el token
         const span = document.createElement('span');
-        span.className = `token-span ${token.tipo}`;
+        span.className = `token-span ${getVisualType(token.tipo)}`;
         
         if (token.tipo === 'SALTO_LINEA') {
             span.textContent = '\n';

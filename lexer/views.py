@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
 
-from .lexer import analyze_code
+from .lexer import analyze_code, normalize_language
 from .utils import analizar_codigo
 
 
@@ -44,9 +44,10 @@ def analyze_lexer(request):
 
         data = json.loads(body_text)
         codigo = data.get('codigo', '')
+        lenguaje = normalize_language(data.get('lenguaje', 'python'))
         logger.debug('analyze_lexer codigo_length=%s', len(codigo))
         
-        resultado = analyze_code(codigo)
+        resultado = analyze_code(codigo, lenguaje=lenguaje)
         logger.debug('analyze_lexer tokens=%s errores=%s', len(resultado.get('tokens', [])), len(resultado.get('errores', [])))
         return JsonResponse(resultado)
     
@@ -70,14 +71,17 @@ def analyze_lexer(request):
 @require_http_methods(["GET", "POST"])
 def arbol_view(request):
     codigo = DEFAULT_TREE_CODE
+    lenguaje = "python"
 
     if request.method == "POST":
         codigo = request.POST.get("codigo", DEFAULT_TREE_CODE)
+        lenguaje = normalize_language(request.POST.get("lenguaje", "python"))
     elif request.GET.get("codigo"):
         codigo = request.GET.get("codigo", DEFAULT_TREE_CODE)
+        lenguaje = normalize_language(request.GET.get("lenguaje", "python"))
 
     try:
-        datos_arbol = analizar_codigo(codigo)
+        datos_arbol = analizar_codigo(codigo, lenguaje=lenguaje)
         json_data = json.dumps(datos_arbol)
         error = None
     except Exception as exc:

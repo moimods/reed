@@ -1,21 +1,17 @@
-"""
-Parser Recursivo Descendente Académico
-Genera árboles de derivación sintácticos formales.
-Consume tokens del lexer y produce nodos tipo: root, non_terminal, terminal.
-"""
+"""Parser sintáctico académico para generar árbol compatible con D3."""
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 
 @dataclass
 class SyntaxNode:
-    """Nodo sintáctico académico con tipos: root, non_terminal, terminal"""
+    """Nodo sintáctico académico con tipos: root, non_terminal, terminal."""
     name: str
     type: str  # "root", "non_terminal", "terminal"
     children: List['SyntaxNode'] = field(default_factory=list)
 
     def to_dict(self):
-        """Convierte el nodo a diccionario para JSON"""
+        """Convierte el nodo a diccionario para JSON."""
         return {
             "name": self.name,
             "type": self.type,
@@ -24,87 +20,264 @@ class SyntaxNode:
 
 
 class SyntaxParser:
-    """
-    Parser recursivo descendente que consume tokens del lexer.
-    Genera árboles de derivación sintácticos formales.
-    
-    Gramática CFG soportada:
-    
-    PROGRAMA -> BLOQUE
-    BLOQUE -> '{' SECUENCIA '}'
-    SECUENCIA -> DECLARACION SECUENCIA | ε
-    DECLARACION -> TIPO LISTA_VARIABLES ';'
-    LISTA_VARIABLES -> IDENTIFICADOR (',' LISTA_VARIABLES)?
-    TIPO -> (int | float | double | string | boolean | var | let | const)
-    """
+    """Parser recursivo simple para visualización de árbol académico."""
 
     def __init__(self, tokens):
-        """
-        Inicializa el parser con una lista de tokens.
-        
-        Args:
-            tokens: Lista de Token objects del lexer
-        """
-        # Filtra saltos de línea y espacios (no relevantes para sintaxis)
+        # Filtra tokens no sintácticos para construir el árbol semántico.
         self.tokens = [t for t in tokens if t.tipo.value not in ("SALTO_LINEA", "ESPACIO", "COMENTARIO")]
         self.current_index = 0
         self.errors = []
+        self.type_keywords = {
+            "int", "float", "double", "string", "boolean", "char", "void",
+            "long", "short", "byte", "var", "let", "const", "auto"
+        }
 
     def current(self):
-        """Retorna el token actual"""
+        """Retorna el token actual."""
         if self.current_index < len(self.tokens):
             return self.tokens[self.current_index]
         return None
 
     def advance(self):
-        """Avanza al siguiente token"""
+        """Avanza al siguiente token."""
         if self.current_index < len(self.tokens):
             self.current_index += 1
 
     def check(self, valor):
-        """Verifica si el token actual tiene el valor especificado"""
+        """Verifica si el token actual tiene el valor especificado."""
         token = self.current()
         return token is not None and token.valor == valor
 
     def check_type(self, tipo_str):
-        """Verifica si el token actual es del tipo especificado"""
+        """Verifica si el token actual es del tipo especificado."""
         token = self.current()
         return token is not None and token.tipo.value == tipo_str
 
-    def consume(self, valor):
-        """Consume un token con valor esperado o lanza error"""
+    def consume(self, valor, mandatory=True):
+        """Consume un token por valor y registra error si es obligatorio."""
         if not self.check(valor):
-            token = self.current()
-            esperado = valor
-            encontrado = f"'{token.valor}'" if token else "EOF"
-            self.errors.append(f"Error: Se esperaba '{esperado}', se encontró {encontrado}")
+            if mandatory:
+                token = self.current()
+                encontrado = f"'{token.valor}'" if token else "EOF"
+                self.errors.append(f"Error: Se esperaba '{valor}', se encontró {encontrado}")
             return False
         self.advance()
         return True
 
+    def _tail(self, node: SyntaxNode) -> SyntaxNode:
+        """Retorna el último nodo de la rama principal para encadenar sentencias."""
+        current = node
+        while current.children:
+            current = current.children[-1]
+        return current
+
+    def _link_sequence(self, statements: List[SyntaxNode]) -> Optional[SyntaxNode]:
+        """Encadena sentencias usando el nodo final de cada sentencia."""
+        if not statements:
+            return None
+
+        for i in range(len(statements) - 1):
+            self._tail(statements[i]).children.append(statements[i + 1])
+        return statements[0]
+
+    def _is_assignment_start(self):
+        return self.check_type("IDENTIFICADOR")
+
+    def _is_type_keyword(self):
+        token = self.current()
+        return (
+            token is not None
+            and token.tipo.value == "PALABRA_RESERVADA"
+            and token.valor in self.type_keywords
+        )
+
+    def _parse_atom(self):
+        token = self.current()
+        if token is None:
+            return SyntaxNode("ε", "terminal")
+
+        if token.tipo.value in {"IDENTIFICADOR", "ENTERO", "FLOAT", "STRING", "BOOLEANO", "NULL"}:
+            self.advance()
+            return SyntaxNode(token.valor, "terminal")
+
+        if self.check("("):
+            self.advance()
+            expr = self._parse_expression()
+            self.consume(")", mandatory=False)
+            return expr
+
+        self.advance()
+        return SyntaxNode(token.valor, "terminal")
+
+    def _parse_expression(self):
+        left = self._parse_atom()
+
+        while self.current() is not None and self.current().tipo.value == "OPERADOR" and self.current().valor in {"+", "-", "*", "/", "%"}:
+            op = self.current().valor
+            self.advance()
+            right = self._parse_atom()
+            left = SyntaxNode(op, "non_terminal", [left, right])
+
+        return left
+
+    def _parse_condition(self):
+        left = self._parse_expression()
+
+        if self.current() is not None and self.current().tipo.value == "OPERADOR" and self.current().valor in {"=", "==", "!=", "<", ">", "<=", ">="}:
+            op = self.current().valor
+            self.advance()
+            right = self._parse_expression()
+            return SyntaxNode(op, "non_terminal", [left, right])
+
+        return left
+
+    def _parse_variable_list_node(self):
+        comma_node = SyntaxNode(",", "non_terminal", [])
+
+        if self.check_type("IDENTIFICADOR"):
+            comma_node.children.append(SyntaxNode(self.current().valor, "terminal"))
+            self.advance()
+        else:
+            self.errors.append("Se esperaba un identificador en la declaración")
+            comma_node.children.append(SyntaxNode("ε", "terminal"))
+            return comma_node
+
+        while self.check(","):
+            self.advance()
+            if self.check_type("IDENTIFICADOR"):
+                comma_node.children.append(SyntaxNode(self.current().valor, "terminal"))
+                self.advance()
+            else:
+                self.errors.append("Se esperaba identificador después de ','")
+                comma_node.children.append(SyntaxNode("ε", "terminal"))
+                break
+
+        return comma_node
+
+    def parse_declaration(self):
+        type_token = self.current()
+        self.advance()
+
+        type_node = SyntaxNode(type_token.valor, "non_terminal", [])
+        comma_node = self._parse_variable_list_node()
+        semicolon_node = SyntaxNode(";", "terminal", [])
+
+        type_node.children.append(comma_node)
+        type_node.children.append(semicolon_node)
+
+        if not self.consume(";", mandatory=False):
+            self.errors.append("Se esperaba ';' en declaración")
+
+        return type_node
+
+    def parse_assignment(self):
+        target = SyntaxNode(self.current().valor, "terminal")
+        self.advance()
+
+        if self.current() is not None and self.current().tipo.value == "OPERADOR" and self.current().valor in {"=", "+=", "-=", "*=", "/="}:
+            op_value = self.current().valor
+            self.advance()
+        else:
+            self.errors.append("Se esperaba operador de asignación")
+            op_value = "="
+
+        expr = self._parse_expression()
+        assign_node = SyntaxNode(op_value, "non_terminal", [target, expr])
+
+        semicolon_node = SyntaxNode(";", "terminal", [])
+        assign_node.children.append(semicolon_node)
+
+        if not self.consume(";", mandatory=False):
+            self.errors.append("Se esperaba ';' en asignación")
+
+        return assign_node
+
+    def parse_block(self):
+        block_node = SyntaxNode("{ }", "non_terminal", [])
+        self.consume("{", mandatory=False)
+
+        statements = []
+        while self.current() is not None and not self.check("}"):
+            statement = self.parse_statement()
+            if statement:
+                statements.append(statement)
+            else:
+                self.advance()
+
+        first = self._link_sequence(statements)
+        if first is None:
+            block_node.children.append(SyntaxNode("ε", "terminal"))
+        else:
+            block_node.children.append(first)
+
+        if not self.consume("}", mandatory=False):
+            self.errors.append("Se esperaba '}' para cerrar bloque")
+
+        return block_node
+
+    def parse_if(self):
+        if_node = SyntaxNode("if", "non_terminal", [])
+        self.consume("if", mandatory=False)
+
+        condition_node = self._parse_condition()
+        if_node.children.append(condition_node)
+
+        if self.check("then"):
+            self.advance()
+            then_node = SyntaxNode("then", "non_terminal", [])
+        else:
+            self.errors.append("Se esperaba 'then' después de la condición del if")
+            then_node = SyntaxNode("then", "non_terminal", [])
+
+        then_statement = self.parse_statement()
+        then_node.children.append(then_statement if then_statement else SyntaxNode("ε", "terminal"))
+        if_node.children.append(then_node)
+
+        else_node = None
+        if self.check("else"):
+            self.advance()
+            else_node = SyntaxNode("else", "non_terminal", [])
+            else_statement = self.parse_statement()
+            else_node.children.append(else_statement if else_statement else SyntaxNode("ε", "terminal"))
+            if_node.children.append(else_node)
+
+        return if_node
+
+    def parse_statement(self):
+        if self.current() is None:
+            return None
+
+        if self._is_type_keyword():
+            return self.parse_declaration()
+
+        if self.check("if"):
+            return self.parse_if()
+
+        if self.check("{"):
+            return self.parse_block()
+
+        if self._is_assignment_start():
+            return self.parse_assignment()
+
+        return None
+
     def parse(self):
-        """
-        Punto de entrada del parser.
-        Retorna: SyntaxNode con raíz PROGRAMA
-        """
+        """Punto de entrada del parser."""
         try:
-            # Un programa es una secuencia de bloques/declaraciones
-            children = []
-            
+            statements = []
             while self.current() is not None:
-                if self.check("{"):
-                    children.append(self.parse_block())
-                elif self.is_type_keyword():
-                    children.append(self.parse_declaration())
+                statement = self.parse_statement()
+                if statement:
+                    statements.append(statement)
                 else:
                     self.advance()
 
+            first = self._link_sequence(statements)
             return SyntaxNode(
                 "PROGRAMA",
                 "root",
-                children if children else [SyntaxNode("ε", "terminal")]
+                [first] if first else [SyntaxNode("ε", "terminal")]
             )
-
         except Exception as e:
             self.errors.append(str(e))
             return SyntaxNode(
@@ -113,109 +286,8 @@ class SyntaxParser:
                 [SyntaxNode(str(e), "terminal")]
             )
 
-    def parse_block(self):
-        """
-        Parsea un bloque: { SECUENCIA }
-        Gramática: BLOQUE -> '{' SECUENCIA '}'
-        """
-        if not self.consume("{"):
-            return SyntaxNode("{ }", "non_terminal", [])
 
-        children = []
-
-        # SECUENCIA
-        while not self.check("}") and self.current() is not None:
-            if self.is_type_keyword():
-                children.append(self.parse_declaration())
-            elif self.check("{"):
-                children.append(self.parse_block())
-            else:
-                self.advance()
-
-        if not self.consume("}"):
-            return SyntaxNode("{ }", "non_terminal", children)
-
-        return SyntaxNode(
-            "{ }",
-            "non_terminal",
-            children if children else [SyntaxNode("ε", "terminal")]
-        )
-
-    def parse_declaration(self):
-        """
-        Parsea una declaración: TIPO LISTA_VARIABLES ;
-        Gramática: DECLARACION -> TIPO LISTA_VARIABLES ';'
-        """
-        if not self.is_type_keyword():
-            self.errors.append("Se esperaba un tipo de dato")
-            return SyntaxNode("ERROR", "non_terminal")
-
-        tipo_token = self.current()
-        tipo = tipo_token.valor
-        self.advance()
-
-        # LISTA_VARIABLES
-        lista_vars = self.parse_variable_list()
-
-        if not self.consume(";"):
-            self.errors.append("Se esperaba ';' después de lista de variables")
-            return SyntaxNode(
-                tipo,
-                "non_terminal",
-                [lista_vars, SyntaxNode(";", "terminal")]
-            )
-
-        return SyntaxNode(
-            tipo,
-            "non_terminal",
-            [lista_vars, SyntaxNode(";", "terminal")]
-        )
-
-    def parse_variable_list(self):
-        """
-        Parsea lista de variables: id (',' id)*
-        Gramática: LISTA_VARIABLES -> IDENTIFICADOR (',' LISTA_VARIABLES)?
-        """
-        variables = []
-
-        while self.current() is not None:
-            if self.check_type("IDENTIFICADOR"):
-                id_token = self.current()
-                variables.append(SyntaxNode(id_token.valor, "terminal"))
-                self.advance()
-
-                # Verifica coma para siguiente variable
-                if self.check(","):
-                    self.advance()
-                else:
-                    break
-            else:
-                break
-
-        # Retorna nodo con lista de variables
-        return SyntaxNode(
-            ",",
-            "non_terminal",
-            variables if variables else [SyntaxNode("ε", "terminal")]
-        )
-
-    def is_type_keyword(self):
-        """Verifica si el token actual es una palabra clave de tipo"""
-        type_keywords = {
-            "int", "float", "double", "string", "boolean",
-            "char", "long", "short", "byte",
-            "var", "let", "const",
-            "void"
-        }
-        token = self.current()
-        return (
-            token is not None and
-            token.tipo.value == "PALABRA_RESERVADA" and 
-            token.valor in type_keywords
-        )
-
-
-def analizar_codigo(codigo):
+def analizar_codigo(codigo, lenguaje="python"):
     """
     Analiza código usando el parser recursivo descendente.
     Retorna árbol sintáctico JSON.
@@ -229,18 +301,15 @@ def analizar_codigo(codigo):
     from .lexer import LexicalAnalyzer
 
     try:
-        # Análisis léxico
-        lexer = LexicalAnalyzer()
+        lexer = LexicalAnalyzer(lenguaje=lenguaje)
         tokens, errores_lexicos = lexer.tokenize(codigo)
 
-        # Análisis sintáctico
         parser = SyntaxParser(tokens)
         arbol = parser.parse()
 
-        # Recopila todos los errores
-        todos_errores = errores_lexicos + parser.errors
+        # Conserva recopilación de errores por compatibilidad futura.
+        _ = errores_lexicos + parser.errors
 
-        # Retorna estructura compatible con D3
         return arbol.to_dict()
 
     except Exception as e:
